@@ -17,6 +17,8 @@ FONT = pygame.font.Font(None, 40)
 
 PLAYER_WIDTH, PLAYER_HEIGHT = 40, 10
 BASE_WIDTH, BASE_HEIGHT = 400, 80
+EXPLOSION_RADIUS = 8
+EXPLOSION_MAX_RADIUS = 30
 WIDTH, HEIGHT = 600, 600
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Galactic Intruders")
@@ -33,9 +35,12 @@ class Player():
         self.y = self.original_y = y
         self.width = width
         self.height = height
+        self.explosions = []
 
     def draw(self, win):
         pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
+        for explosion in self.explosions:
+            explosion.draw(win)
 
     def move(self, left=True):
         if left:
@@ -52,6 +57,11 @@ class Player():
     def reset(self):
         self.x = self.original_x
         self.y = self.original_y
+        self.explosions = []
+
+    def explode(self):
+        new_explosion = Explosion(self.x + self.width // 2, self.y + self.height // 2, EXPLOSION_RADIUS, EXPLOSION_MAX_RADIUS)
+        self.explosions.append(new_explosion)
 
 class Base():
     COLOR = BLUE
@@ -64,11 +74,38 @@ class Base():
     def draw(self, win):
         pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
 
+class Explosion():
+    def __init__(self, x, y, initial_radius, max_radius):
+        self.x = x
+        self.y = y
+        self.initial_radius = initial_radius
+        self.current_radius = initial_radius
+        self.max_radius = max_radius
+        self.color = RED
+        self.duration = 120
+
+    def draw(self, win):
+        pygame.draw.circle(win, self.color, (self.x, self.y), int(self.current_radius))
+
+    def update(self):
+        if self.current_radius < self.max_radius:
+            self.current_radius += (self.max_radius - self.initial_radius) / self.duration
+        elif self.duration > 0:
+            self.current_radius -= self.max_radius / self.duration
+        self.duration -= 1
+
+    def is_complete(self):
+        return self.duration <= 0
+
 def draw_player(win, player):
     player.draw(win)
 
 def draw_base(win, base):
     base.draw(win)
+
+def draw_missiles(win, missiles):
+    for missile in missiles:
+        missile.draw(win)
 
 def movement(keys, player):
     if keys[pygame.K_a] and player.x - player.VEL >= 0:
@@ -79,7 +116,8 @@ def movement(keys, player):
         player.move_up_down(up=True)
     if keys[pygame.K_s] and player.y + player.height + player.VEL <= HEIGHT - 80:
         player.move_up_down(up=False)
-        
+    if keys[pygame.K_SPACE]:
+        player.explode()
 
 pygame.mixer.music.load("assets/i_wonder.wav")
 pygame.mixer.music.set_volume(0.3)
@@ -111,6 +149,11 @@ def main():
 
             keys = pygame.key.get_pressed()
             movement(keys, player)
+
+            for explosion in player.explosions:
+                explosion.update()
+                if explosion.is_complete():
+                    player.explosions.remove(explosion)
 
             if game_over:
                 pygame.mixer.music.pause()
