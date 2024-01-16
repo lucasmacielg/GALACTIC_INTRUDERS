@@ -1,5 +1,5 @@
 import pygame
-import random
+from random import randint
 
 pygame.init()
 
@@ -23,19 +23,15 @@ WIDTH, HEIGHT = 600, 600
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Galactic Intruders")
 
-class Missiles():
-    pass
-
-class Player():  
+class Player():
     COLOR = WHITE
-    VEL = 8
+    VEL = 3
 
     def __init__(self, x, y, width, height):
-        self.x = self.original_x = x
-        self.y = self.original_y = y
-        self.width = width
-        self.height = height
+        self.x, self.y = x, y
+        self.width, self.height = width, height
         self.explosions = []
+        self.last_explosion_time = 0
 
     def draw(self, win):
         pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
@@ -43,44 +39,38 @@ class Player():
             explosion.draw(win)
 
     def move(self, left=True):
-        if left:
-            self.x -= self.VEL
-        else:
-            self.x += self.VEL
+        self.x -= self.VEL if left else 0
+        self.x += self.VEL if not left else 0
 
     def move_up_down(self, up=True):
-        if up:
-            self.y -= self.VEL
-        if not up:
-            self.y += self.VEL
+        self.y -= self.VEL if up else 0
+        self.y += self.VEL if not up else 0
 
     def reset(self):
-        self.x = self.original_x
-        self.y = self.original_y
+        self.x, self.y = self.original_x, self.original_y
         self.explosions = []
 
     def explode(self):
-        new_explosion = Explosion(self.x + self.width // 2, self.y + self.height // 2, EXPLOSION_RADIUS, EXPLOSION_MAX_RADIUS)
-        self.explosions.append(new_explosion)
+        current_time = pygame.time.get_ticks()
+        if current_time - self.last_explosion_time > 1000:
+            new_explosion = Explosion(self.x + self.width // 2, self.y + self.height // 2, EXPLOSION_RADIUS, EXPLOSION_MAX_RADIUS)
+            self.explosions.append(new_explosion)
+            self.last_explosion_time = current_time
 
 class Base():
     COLOR = BLUE
+
     def __init__(self, x, y, width, height):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
+        self.x, self.y = x, y
+        self.width, self.height = width, height
 
     def draw(self, win):
         pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
 
 class Explosion():
     def __init__(self, x, y, initial_radius, max_radius):
-        self.x = x
-        self.y = y
-        self.initial_radius = initial_radius
-        self.current_radius = initial_radius
-        self.max_radius = max_radius
+        self.x, self.y = x, y
+        self.initial_radius, self.current_radius, self.max_radius = initial_radius, initial_radius, max_radius
         self.color = RED
         self.duration = 120
 
@@ -97,104 +87,87 @@ class Explosion():
     def is_complete(self):
         return self.duration <= 0
 
+class Missile():
+    COLOR = (255, 165, 0)
+    VEL = 1
+
+    def __init__(self, x, y, width, height):
+        self.x, self.y = x, y
+        self.width, self.height = 10, 10
+
+    def draw(self, win):
+        pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
+
+    def move(self, down=True):
+        self.y += self.VEL if down else 0
+
+def generate_missile():
+    x = randint(0, WIDTH - 10)
+    y = 0
+    return Missile(x, y, 10, 10)
+
+def draw_missiles(win, missiles):
+    for missile in missiles:
+        missile.draw(win)
+        missile.move()
+
 def draw_player(win, player):
     player.draw(win)
 
 def draw_base(win, base):
     base.draw(win)
 
-def draw_missiles(win, missiles):
-    for missile in missiles:
-        missile.draw(win)
-
 def movement(keys, player):
-    if keys[pygame.K_a] and player.x - player.VEL >= 0:
-        player.move(left=True)
-    if keys[pygame.K_d] and player.x + player.width + player.VEL <= WIDTH:
-        player.move(left=False)
-    if keys[pygame.K_w] and player.y - player.VEL >= 0:
-        player.move_up_down(up=True)
-    if keys[pygame.K_s] and player.y + player.height + player.VEL <= HEIGHT - 80:
-        player.move_up_down(up=False)
+    player.move(left=keys[pygame.K_a])
+    player.move(left=not keys[pygame.K_d])
+    player.move_up_down(up=keys[pygame.K_w])
+    player.move_up_down(up=not keys[pygame.K_s])
     if keys[pygame.K_SPACE]:
         player.explode()
 
-pygame.mixer.music.load("assets/i_wonder.wav")
-pygame.mixer.music.set_volume(0.3)
-
 def main():
+    pygame.mixer.music.load("assets/i_wonder.wav")
+    pygame.mixer.music.set_volume(0.3)
     pygame.mixer.music.play(-1)
+
     game_loop = True
     clock = pygame.time.Clock()
+
     player = Player(WIDTH // 2, HEIGHT - 125, PLAYER_WIDTH, PLAYER_HEIGHT)
     base = Base((WIDTH - BASE_WIDTH) // 2, HEIGHT - BASE_HEIGHT, BASE_WIDTH, BASE_HEIGHT)
-    lost = False
-    restart_text_font = pygame.font.Font(None, 20)
-    restart_text = restart_text_font.render("PRESS SPACE TO RESTART", True, WHITE)
-
-    victory = False
+    
+    missiles = []
 
     while game_loop:
         clock.tick(FPS)
 
-        game_over = False
-        if not lost:
-            SCREEN.fill(BLACK)
-            draw_base(SCREEN, base)
-            draw_player(SCREEN, player)
+        SCREEN.fill(BLACK)
+        draw_base(SCREEN, base)
+        draw_player(SCREEN, player)
+        draw_missiles(SCREEN, missiles)
+        
+        if randint(0, 100) < 5:  
+            missiles.append(generate_missile())
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    game_loop = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                game_loop = False
 
-            keys = pygame.key.get_pressed()
-            movement(keys, player)
+        for explosion in player.explosions:
+            explosion.update()
+            if explosion.is_complete():
+                player.explosions.remove(explosion)
 
-            for explosion in player.explosions:
-                explosion.update()
-                if explosion.is_complete():
-                    player.explosions.remove(explosion)
+        for missile in missiles:
+            if missile.y >= HEIGHT:
+                missiles.remove(missile)
 
-            if game_over:
-                pygame.mixer.music.pause()
-                SCREEN.fill(BLACK)
-                pygame.display.update()
-                lost = True
-
-            if victory:
-                pygame.mixer.music.pause()
-                SCREEN.fill(BLACK)
-                win_text = 'YOU WIN!'
-                SCREEN.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 - restart_text.get_height() // 2))
-                text = FONT.render(win_text, True, WHITE)
-                SCREEN.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2 - 200))
-                pygame.display.update()
-                pygame.time.delay(3000)
-
-            if lost:
-                pygame.mixer.music.pause()
-                SCREEN.fill(BLACK)
-                SCREEN.blit(restart_text, (WIDTH // 2 - restart_text.get_width() // 2, HEIGHT // 2 - restart_text.get_height() // 2))
-                text = FONT.render("YOU LOST!", True, WHITE)
-                SCREEN.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2 - 200))
-                pygame.display.update()
-
-                space_pressed = False
-                while not space_pressed:
-                    for event in pygame.event.get():
-                        if event.type == pygame.QUIT:
-                            game_loop = False
-                            space_pressed = True
-                            pygame.mixer.pause()
-
-                        if event.type == pygame.KEYDOWN:
-                            if event.key == pygame.K_SPACE:
-                                pygame.mixer.pause()
-                                pygame.display.update()
-                                lost = False
-                                space_pressed = True
+        keys = pygame.key.get_pressed()
+        movement(keys, player)
 
         pygame.display.update()
+
+    pygame.quit()
 
 if __name__ == '__main__':
     main()
