@@ -1,5 +1,5 @@
 import pygame
-from random import randint
+import random
 pygame.init()
 
 FPS = 60
@@ -38,13 +38,17 @@ class Player():
             explosion.draw(win)
 
     def move(self, left=True):
-        self.x -= self.VEL if left else 0
-        self.x += self.VEL if not left else 0
+        if left and self.x - self.VEL >= 0:  
+            self.x -= self.VEL
+        elif not left and self.x + self.width + self.VEL <= WIDTH: 
+            self.x += self.VEL
 
     def move_up_down(self, up=True):
-        self.y -= self.VEL if up else 0
-        self.y += self.VEL if not up else 0
-
+        if up and self.y - self.VEL >= 0:  
+            self.y -= self.VEL
+        elif not up and self.y + self.height + self.VEL <= HEIGHT - BASE_HEIGHT:  
+            self.y += self.VEL
+            
     def reset(self):
         self.x, self.y = self.original_x, self.original_y
         self.explosions = []
@@ -62,6 +66,7 @@ class Base():
     def __init__(self, x, y, width, height):
         self.x, self.y = x, y
         self.width, self.height = width, height
+        self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 
     def draw(self, win):
         pygame.draw.rect(win, self.COLOR, (self.x, self.y, self.width, self.height))
@@ -87,23 +92,53 @@ class Explosion():
         return self.duration <= 0
 
 class Missile():
-    VEL = 1
-
-    def __init__(self, x, y, width, height, cor):
+    def __init__(self, x, y, cor, velocidade):
         self.x, self.y = x, y
-        self.width, self.height = 10, 10
+        self.width, self.height = 10, 10 
         self.color = cor
+        self.velocidade = velocidade
+        self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
 
     def draw(self, win):
         pygame.draw.rect(win, self.color, (self.x, self.y, self.width, self.height))
 
     def move(self, down=True):
-        self.y += self.VEL if down else 0
+        self.y += self.velocidade if down else 0
+        self.rect.y = self.y  
+   
+velocidades_por_cor = {
+    YELLOW: 0.7,
+    GREEN: 1,
+    ORANGE: 1.3,
+    RED: 1.5
+}     
+HORDA_CONFIG = {
+    1: {'cores': [GREEN, YELLOW], 'chances': [0.5, 0.5]},
+    3: {'cores': [GREEN, YELLOW, ORANGE], 'chances': [0.5, 0.3, 0.2]},
+    5: {'cores': [GREEN, YELLOW, ORANGE], 'chances': [0.4, 0.2, 0.4]},
+    7: {'cores': [GREEN, YELLOW, ORANGE, RED], 'chances': [0.3, 0.2, 0.3, 0.2]},
+    9: {'cores': [GREEN, ORANGE, RED], 'chances': [0.3, 0.3, 0.4]},
+    11: {'cores': [GREEN, ORANGE, RED], 'chances': [0.2, 0.5, 0.3]},
+    13: {'cores': [GREEN, ORANGE, RED], 'chances': [0.2, 0.4, 0.4]},
+    15: {'cores': [GREEN, ORANGE, RED], 'chances': [0.3, 0.3, 0.4]},
+    17: {'cores': [GREEN, ORANGE, RED], 'chances': [0.1, 0.4, 0.5]},
+    19: {'cores': [GREEN, ORANGE, RED], 'chances': [0.1, 0.3, 0.6]},
+}
+
+def generate_horda(horda):
+    missiles = []
+    for _ in range(horda):
+        horda_config = HORDA_CONFIG[max(k for k in HORDA_CONFIG.keys() if k <= horda)]
+        cor = random.choices(horda_config['cores'], weights=horda_config['chances'], k=1)[0]
+        velocidade = velocidades_por_cor[cor]
+        missiles.append(Missile(random.randint(0, WIDTH), 0, cor, velocidade))
+    return missiles
 
 def generate_missile(cor):
-    x = randint(0, WIDTH - 10)
+    x = random.randint(0, WIDTH - 10)
     y = 0
-    return Missile(x, y, 10, 10, cor)
+    velocidade = velocidades_por_cor[cor]
+    return Missile(x, y, cor, velocidade)
 
 def draw_missiles(win, missiles):
     for missile in missiles:
@@ -115,7 +150,38 @@ def draw_player(win, player):
 
 def draw_base(win, base):
     base.draw(win)
+    
+def draw_game_over(win):
+    font = pygame.font.Font(None, 72)
+    text = font.render("Game Over", True, (255, 255, 255))
+    win.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - text.get_height() // 2))
 
+    font = pygame.font.Font(None, 36)
+    text = font.render("Pressione R para reiniciar", True, (255, 255, 255))
+    win.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 + text.get_height()))
+
+
+    
+def check_collision_missile_explosion(missiles, explosions):
+    for missile in missiles:
+        for explosion in explosions:
+            dist = ((missile.x - explosion.x)**2 + (missile.y - explosion.y)**2)**0.5
+            if dist <= explosion.current_radius:
+                return missile
+    return None
+
+def check_collision_missile_base(missiles, base):
+    for missile in missiles:
+        if missile.x < base.x + base.width and missile.x + missile.width > base.x and missile.y < base.y + base.height and missile.y + missile.height > base.y:
+            return True
+    return False
+
+pontos_por_cor = {
+    YELLOW: 1,
+    GREEN: 3,
+    ORANGE: 5,
+    RED: 7
+}
 def movement(keys, player):
     player.move(left=keys[pygame.K_a])
     player.move(left=not keys[pygame.K_d])
@@ -123,22 +189,38 @@ def movement(keys, player):
     player.move_up_down(up=not keys[pygame.K_s])
     if keys[pygame.K_SPACE]:
         player.explode()
+    
+def draw_score(win, score):
+    font = pygame.font.Font(None, 36)  
+    text = font.render(f"Points: {score}", True, (255, 255, 255))  
+    win.blit(text, (WIDTH - text.get_width() - 10, 10))  
+
+vida = 100
+dano_por_cor = {
+    YELLOW: 1,
+    GREEN: 2,
+    ORANGE: 3,
+    RED: 5
+}
+
+def draw_life(win, vida):
+    font = pygame.font.Font(None, 36)
+    text = font.render(f"Vida: {vida}", True, (255, 255, 255))
+    win.blit(text, (10, 10))
+
 
 def main():
     game_loop = True
     clock = pygame.time.Clock()
-
+    horda = 1
     player = Player(WIDTH // 2, HEIGHT - 125, PLAYER_WIDTH, PLAYER_HEIGHT)
     base = Base((WIDTH - BASE_WIDTH) // 2, HEIGHT - BASE_HEIGHT, BASE_WIDTH, BASE_HEIGHT)
-    
+    vida = 100
     missiles = []
+    pontuacao = 0 
+    ultimo_spawn = pygame.time.get_ticks()
+    intervalo_spawn = 1000  
 
-    horda = 1
-    inimigo_chance_spawn = {'verde': 50, 'amarelo': 50, 'laranja': 0, 'vermelho': 0}
-    inimigo_velocidade_buff = 1.0
-    current_time = pygame.time.get_ticks()
-    last_spawn_time = pygame.time.get_ticks()
-    spawn_interval = 300
     while game_loop:
         clock.tick(FPS)
 
@@ -146,69 +228,50 @@ def main():
         draw_base(SCREEN, base)
         draw_player(SCREEN, player)
         draw_missiles(SCREEN, missiles)
-
-        current_time = pygame.time.get_ticks()
-        if horda % 2 == 1 and horda <= 20:
-            inimigos_por_horda = 50 + (horda - 1) * 20
-            while len(missiles) < inimigos_por_horda and current_time - last_spawn_time >= spawn_interval:
-                if randint(0, 100) < inimigo_chance_spawn['verde']:
-                    missiles.append(generate_missile(GREEN))
-                if randint(0, 100) < inimigo_chance_spawn['amarelo']:
-                    missiles.append(generate_missile(YELLOW))
-                last_spawn_time = current_time
+        draw_score(SCREEN, pontuacao)
+        draw_life(SCREEN, vida) 
         
-        elif horda % 2 == 0 and horda <= 20:
-            if horda >= 3 and horda <= 4:
-                inimigo_chance_spawn['laranja'] += 10
-                inimigo_chance_spawn['amarelo'] -= 10
-                inimigo_chance_spawn['verde'] += 10
-                spawn_interval -= 10
-            elif horda >= 5 and horda <= 6:
-                inimigo_velocidade_buff += 0.2
-                spawn_interval -= 10
-                inimigo_chance_spawn['laranja'] += 10
-                inimigo_chance_spawn['vermelho'] += 10
-                inimigo_chance_spawn['verde'] += 10
-            elif horda >= 7 and horda <= 8:
-                inimigo_chance_spawn['vermelho'] += 10
-                spawn_interval -= 10
-            elif horda >= 9 and horda <= 10:
-                inimigo_chance_spawn['amarelo'] -= 10
-                spawn_interval -= 10
-                inimigo_velocidade_buff += 0.2
-            elif horda >= 11 and horda <= 12:
-                inimigo_chance_spawn['laranja'] += 10
-                spawn_interval -= 10
-            elif horda >= 13 and horda <= 14:
-                inimigo_velocidade_buff += 0.2
-                spawn_interval -= 10
-            elif horda >= 15 and horda <= 16:
-                inimigo_chance_spawn['amarelo'] = 0
-                spawn_interval -= 10
-            elif horda >= 17 and horda <= 18:
-                inimigo_chance_spawn['vermelho'] += 10
-                spawn_interval -= 10
-            elif horda >= 19 and horda <= 20:
-                inimigo_velocidade_buff += 0.2
-                spawn_interval -= 10
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                game_loop = False
-
-        for explosion in player.explosions:
-            explosion.update()
-            if explosion.is_complete():
-                player.explosions.remove(explosion)
-
-        for missile in missiles:
-            if missile.y >= HEIGHT:
-                missiles.remove(missile)
-
-        keys = pygame.key.get_pressed()
-        movement(keys, player)
-
         pygame.display.update()
+        if vida <= 0:
+            draw_game_over(SCREEN)
+            pygame.display.update()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    game_loop = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        main() 
+                        return
+        else:
+            missile_colisao = check_collision_missile_explosion(missiles, player.explosions)
+            if missile_colisao:
+                pontuacao += pontos_por_cor[missile_colisao.color]
+                missiles.remove(missile_colisao)
+            
+            current_time = pygame.time.get_ticks()
+            if current_time - ultimo_spawn >= intervalo_spawn:
+                if len(missiles) == 0 and horda <= 20:
+                    horda += 1
+                    print(f'Horda {horda}')
+                missiles.extend(generate_horda(1))
+                ultimo_spawn = current_time
+                    
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    game_loop = False
+
+            for explosion in player.explosions:
+                explosion.update()
+                if explosion.is_complete():
+                    player.explosions.remove(explosion)
+
+            for missile in missiles:
+                if base.rect.colliderect(missile.rect):  
+                    vida -= dano_por_cor[missile.color]  
+                    missiles.remove(missile)
+
+            keys = pygame.key.get_pressed()
+            movement(keys, player)
 
         if len(missiles) == 0 and horda <= 20:
             horda += 1

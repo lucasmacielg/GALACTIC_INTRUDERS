@@ -24,3 +24,7 @@ Inimigos do tipo vermelho têm um buff na chance de spawn.
 Horda 19 - 20:
 Inimigos de todos os tipos recebem um buff de velocidade.
 
+amarelo - concede 1 ponto
+verde - concede 3 pontos
+laranja - concede 5 pontos
+vermelhor - concede 7 pontos
